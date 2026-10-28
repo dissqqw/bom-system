@@ -17,9 +17,7 @@ bom_bp = Blueprint('bom', __name__)
 PRODUCT_TYPES = {'material', 'part', 'assembly', 'complex'}
 
 
-# ---------------------------------------------------------------------------
-# Служебные функции
-# ---------------------------------------------------------------------------
+# служебные функции
 
 class ApiError(Exception):
     """Ошибка валидации, которая превращается в JSON-ответ."""
@@ -152,9 +150,7 @@ def _classifier_ids_with_children(classifier):
     }
 
 
-# ---------------------------------------------------------------------------
-# Классификатор продукции
-# ---------------------------------------------------------------------------
+# классификатор продукции
 
 @bom_bp.route('/api/bom/classifiers', methods=['GET'])
 def get_classifiers():
@@ -200,10 +196,11 @@ def add_classifier():
             'Не удалось создать категорию: ошибка целостности данных', 409
         )
 
-    except Exception:
-        return _json_error('Внутренняя ошибка при создании категории', 500)
-
-
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return _json_error(f'Внутренняя ошибка: {e}', 500)
+    
 @bom_bp.route('/api/bom/classifier/<int:id_classifier>', methods=['GET'])
 def get_classifier(id_classifier):
     classifier = _get_or_404(
@@ -232,18 +229,10 @@ def get_classifier_tree(id_classifier):
 
     return jsonify({'tree': build_tree(classifier)}), 200
 
+# справочник изделий
 
-# ---------------------------------------------------------------------------
-# Справочник изделий
-# ---------------------------------------------------------------------------
 
 def _check_base_product(base_product_id, product=None):
-    """
-    Проверяет, что изделие можно назначить базовым.
-    Базовое изделие не может быть модификацией (иерархия в один уровень),
-    а изделие, у которого уже есть модификации, не может само стать
-    модификацией. Поэтому циклы по base_product_id невозможны.
-    """
     base = _get_or_404(Product, base_product_id, 'Базовое изделие не найдено')
 
     if product is not None:
@@ -438,15 +427,7 @@ def update_product(id_product):
         return _json_error('Внутренняя ошибка при обновлении изделия', 500)
 
 
-# ---------------------------------------------------------------------------
-# Спецификация (BOM): позиции
-#
-# Смысл флага is_base:
-#   True  - позиция принадлежит базовой спецификации (у базового изделия
-#           все позиции базовые; у модификации это позиции, скопированные
-#           из базового изделия и не изменённые);
-#   False - позиция специфична для модификации (добавлена или изменена).
-# ---------------------------------------------------------------------------
+# BOM позиции
 
 def _would_create_bom_cycle(parent_id, component_id):
     if parent_id == component_id:
@@ -477,11 +458,7 @@ def _would_create_bom_cycle(parent_id, component_id):
 
 
 def _visible_positions(product, include_base=True):
-    """
-    Позиции спецификации изделия.
-    include_base=False для модификации возвращает только её собственные
-    (небазовые) позиции, то есть отличия от базового изделия.
-    """
+
     query = BOMPosition.query.filter_by(parent_product_id=product.id_product)
 
     if not include_base and product.base_product_id is not None:
@@ -667,8 +644,7 @@ def update_bom_position(id_position):
         changes.append(f'is_base = {position.is_base}')
 
     try:
-        # position.component_product ещё не обновлён до flush, поэтому
-        # описание строится только из локальных переменных
+
         _register_bom_change(
             position.parent_product_id,
             f'Изменена позиция спецификации id={position.id_position}: '
@@ -721,9 +697,8 @@ def delete_bom_position(id_position):
         return _json_error('Не удалось удалить позицию спецификации', 500)
 
 
-# ---------------------------------------------------------------------------
-# FIND_BOM: полное дерево состава
-# ---------------------------------------------------------------------------
+# полное дерево состава
+
 
 def _build_bom_tree(product, include_base, path=None):
     path = path or set()
@@ -806,9 +781,8 @@ def get_all_bom_components(id_product):
     }), 200
 
 
-# ---------------------------------------------------------------------------
-# CALC_BOM: сводные нормы расхода материалов
-# ---------------------------------------------------------------------------
+# CALC_BOM
+
 
 def _calculate_bom(product, quantity, include_base, class_ids,
                    result, skipped, path=None):
@@ -947,9 +921,7 @@ def calc_bom(id_product):
     }), 200
 
 
-# ---------------------------------------------------------------------------
 # CREATE_MODIFICATION
-# ---------------------------------------------------------------------------
 
 @bom_bp.route(
     '/api/bom/product/<int:id_base>/modification',
@@ -992,7 +964,7 @@ def create_modification(id_base):
         db.session.add(modification)
         db.session.flush()
 
-        # копируется только базовая часть спецификации (is_base=True)
+        # копируется только базовая часть спецификации 
         base_positions = BOMPosition.query.filter_by(
             parent_product_id=base_product.id_product,
             is_base=True
@@ -1031,10 +1003,7 @@ def create_modification(id_base):
     except Exception:
         return _json_error('Ошибка при создании модификации', 500)
 
-
-# ---------------------------------------------------------------------------
-# История изменений
-# ---------------------------------------------------------------------------
+# история изменений
 
 @bom_bp.route(
     '/api/bom/product/<int:id_product>/changes',
