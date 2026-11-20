@@ -1,4 +1,3 @@
-
 from ..database import db
 
 
@@ -37,6 +36,18 @@ class Product(db.Model):
         foreign_keys=[base_product_id],
         backref=db.backref('modifications', lazy='select')
     )
+
+    # Маршрутные позиции изделия (добавлено для практической работы №6).
+    technology_positions = db.relationship(
+        'ProductOperation',
+        back_populates='product',
+        cascade='all, delete-orphan',
+        order_by='ProductOperation.sequence_number',
+    )
+
+    def get_operations(self):
+        """Возвращает технологические позиции изделия по порядку."""
+        return list(self.technology_positions)
 
     def to_dict(self):
         return {
